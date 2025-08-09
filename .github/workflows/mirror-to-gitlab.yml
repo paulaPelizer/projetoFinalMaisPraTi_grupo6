@@ -33,7 +33,7 @@ jobs:
         env:
           # 🔧 SUBSTITUA abaixo pelo HTTPS do seu repo GitLab (menu Code → Clone → HTTPS)
           # Exemplo: https://gitlab.com/seu-grupo/projetoFinalMaisPraTi_grupo6.git
-          GITLAB_REPO_URL: "https://gitlab.com/<SEU-NAMESPACE>/<SEU-REPO>.git"
+          GITLAB_REPO_URL: "https://gitlab.com/projeto-final-maisprati-codifica/projetoFinalMaisPraTi_grupo6.git"
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           # injeta o token no URL HTTPS: https://oauth2:TOKEN@gitlab.com/...
