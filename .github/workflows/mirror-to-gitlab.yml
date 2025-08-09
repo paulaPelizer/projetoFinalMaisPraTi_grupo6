@@ -1,0 +1,56 @@
+name: Mirror to GitLab
+
+on:
+  push:
+    branches:
+      - "**"      # envia qualquer branch
+    tags:
+      - "**"      # envia tags também
+  delete:          # propaga deleções (branches/tags)
+    branches: {}
+    tags: {}
+  workflow_dispatch: {}  # permite rodar manualmente
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: mirror-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set git identity
+        run: |
+          git config user.name "GitHub→GitLab Mirror Bot"
+          git config user.email "mirror-bot@users.noreply.github.com"
+
+      - name: Push to GitLab
+        env:
+          # 🔧 SUBSTITUA abaixo pelo HTTPS do seu repo GitLab (menu Code → Clone → HTTPS)
+          # Exemplo: https://gitlab.com/seu-grupo/projetoFinalMaisPraTi_grupo6.git
+          GITLAB_REPO_URL: "https://gitlab.com/<SEU-NAMESPACE>/<SEU-REPO>.git"
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          # injeta o token no URL HTTPS: https://oauth2:TOKEN@gitlab.com/...
+          AUTH_URL="${GITLAB_REPO_URL/https:\/\//https:\/\/oauth2:${GITLAB_TOKEN}@}"
+          git remote add gitlab "$AUTH_URL"
+
+          if [[ "${{ github.event_name }}" == "delete" ]]; then
+            # deletou branch/tag no GitHub → deleta no GitLab
+            REF="${GITHUB_REF#refs/}"
+            git push gitlab :${REF}
+            exit 0
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            git push gitlab "refs/tags/${TAG}:refs/tags/${TAG}"
+          else
+            BRANCH="${GITHUB_REF#refs/heads/}"
+            git push gitlab "HEAD:refs/heads/${BRANCH}"
+          fi
