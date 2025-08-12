@@ -50,5 +50,5 @@ jobs:
             git push gitlab "refs/tags/${TAG}:refs/tags/${TAG}"
           else
             BRANCH="${GITHUB_REF#refs/heads/}"
-            git push gitlab "HEAD:refs/heads/${BRANCH}"
+            git push --force-with-lease gitlab "HEAD:refs/heads/${BRANCH}"
           fi
