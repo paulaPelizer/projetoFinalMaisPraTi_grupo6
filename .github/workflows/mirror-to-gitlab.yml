@@ -50,5 +50,9 @@ jobs:
             git push gitlab "refs/tags/${TAG}:refs/tags/${TAG}"
           else
             BRANCH="${GITHUB_REF#refs/heads/}"
+          # Garantir que temos o estado atual da branch no GitLab
+            git fetch --no-tags gitlab "${BRANCH}" || true
+          # Forçar push respeitando alterações novas
             git push --force-with-lease gitlab "HEAD:refs/heads/${BRANCH}"
           fi
+
