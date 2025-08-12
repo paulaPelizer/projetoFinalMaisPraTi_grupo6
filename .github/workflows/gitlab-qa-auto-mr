@@ -1,0 +1,106 @@
+name: Auto MR to GitLab QA (frontend)
+
+on:
+  # 1) Push direto na branch frontend
+  push:
+    branches:
+      - frontend
+      - 'frontend/**'
+  # 2) Merge de PR no GitHub cujo target é frontend
+  pull_request:
+    types: [closed]
+    branches: [frontend]
+
+  workflow_dispatch: {}
+
+jobs:
+  to-qa:
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+
+    env:
+      # ====== preencha via GitHub Secrets ======
+      GL_TOKEN:        ${{ secrets.GITLAB_QA_TOKEN }}        # token do fork QA (scopes: read_repository, write_repository)
+      GL_QA_REPO:      ${{ secrets.GITLAB_QA_REPO }}         # ex: https://gitlab.com/<qa-namespace>/<fork>.git
+      GL_QA_PROJECT_ID:${{ secrets.GITLAB_QA_PROJECT_ID }}   # ID numérico do fork QA
+      # opcionais:
+      GL_LABELS:       frontend,auto
+      GL_ASSIGNEE_ID:  ${{ secrets.GITLAB_QA_ASSIGNEE_ID }}  # id numérico do usuário QA
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Descobrir branch fonte no GitHub
+        id: src
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            # PR mergeado para frontend
+            SRC_BRANCH="${{ github.event.pull_request.head.ref }}"
+          else
+            # push normal
+            SRC_BRANCH="${GITHUB_REF_NAME}"
+          fi
+          echo "src=${SRC_BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Definir branch destino no fork QA
+        id: dest
+        run: |
+          ACTOR="$(echo "${GITHUB_ACTOR}" | tr '[:upper:]' '[:lower:]')"
+          # Se você quer SEMPRE centralizar no dev/paulapelizer/frontend, fixe aqui:
+          if [ "${{ steps.src.outputs.src }}" = "frontend" ]; then
+            DEST="dev/paulapelizer/frontend"
+          else
+            # se for frontend/<alguma-coisa>, mantém múltiplas branches por dev
+            DEST="dev/${ACTOR}/${{ steps.src.outputs.src }}"
+          fi
+          echo "dest=${DEST}" >> $GITHUB_OUTPUT
+
+      - name: Push para o fork QA (sem force)
+        run: |
+          set -euo pipefail
+          AUTH_URL="${GL_QA_REPO/https:\/\//https:\/\/oauth2:${GL_TOKEN}@}"
+          git remote add gitlab-qa "$AUTH_URL" || true
+          git push gitlab-qa ${{ steps.src.outputs.src }}:refs/heads/${{ steps.dest.outputs.dest }}
+
+      - name: Instalar jq
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+
+      - name: Abrir/reativar MR no fork QA (DEST -> frontend)
+        env:
+          API: https://gitlab.com/api/v4
+        run: |
+          set -euo pipefail
+          SRC="${{ steps.dest.outputs.dest }}"
+          TARGET="frontend"
+
+          # Ver se já existe MR aberto dessa source -> target
+          EXISTING=$(curl -s --header "PRIVATE-TOKEN: ${GL_TOKEN}" \
+            "${API}/projects/${GL_QA_PROJECT_ID}/merge_requests?state=opened&source_branch=${SRC}&target_branch=${TARGET}" \
+            | jq '.[0]')
+
+          if [ "$EXISTING" != "null" ] && [ -n "$EXISTING" ]; then
+            IID=$(echo "$EXISTING" | jq -r '.iid')
+            echo "MR já existe (iid=${IID}) para ${SRC} -> ${TARGET}"
+            exit 0
+          fi
+
+          TITLE="[auto] ${SRC} → ${TARGET}"
+          DESC="Criado automaticamente a partir do GitHub (${GITHUB_REPOSITORY}@${GITHUB_SHA})"
+          DATA="title=${TITLE}&description=${DESC}&source_branch=${SRC}&target_branch=${TARGET}&remove_source_branch=true&labels=${GL_LABELS}"
+
+          if [ -n "${GL_ASSIGNEE_ID:-}" ]; then
+            DATA="${DATA}&assignee_id=${GL_ASSIGNEE_ID}"
+          fi
+
+          curl -s --request POST --header "PRIVATE-TOKEN: ${GL_TOKEN}" \
+            --data "${DATA}" \
+            "${API}/projects/${GL_QA_PROJECT_ID}/merge_requests" >/dev/null
+
+          echo "MR criado: ${SRC} -> ${TARGET}"
