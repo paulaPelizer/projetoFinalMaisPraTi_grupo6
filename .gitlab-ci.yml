@@ -1,0 +1,23 @@
+stages: [test, approve]
+
+# Exemplo de verificação automática (ajuste pro seu stack)
+lint:
+  stage: test
+  image: node:20
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - npm ci
+    - npm run lint
+
+# Gate manual para branches específicas
+approve_branches:
+  stage: approve
+  rules:
+    # aprove branches de frentes (ajuste a lista)
+    - if: '$CI_COMMIT_BRANCH =~ /^(frontend|backend|data|devops)$/'
+  when: manual
+  allow_failure: false
+  # usar ambiente protegido para limitar quem pode "Play"
+  environment:
+    name: approvals/$CI_COMMIT_BRANCH
