@@ -27,36 +27,52 @@ jobs:
           git config user.name "GitHub→GitLab Mirror Bot"
           git config user.email "mirror-bot@users.noreply.github.com"
           git lfs install --skip-smudge
+          git config --global lfs.locksverify false
 
       - name: Build remote and verify access
         env:
           GL_TOKEN: ${{ secrets.GITLAB_REMOTE }}   # token glpat-...
-          GL_PATH:  ${{ vars.GITLAB_PATH }}        # ex.: projeto-final-maisprati-codifica/projetofinalmaispratigrupo6
+          GL_PATH:  ${{ vars.GITLAB_PATH }}        # ex.: meu-grupo/sub/meu-repo
         run: |
           set -e
-          if [ -z "$GL_PATH" ]; then
-            echo "Defina a Repository variable GITLAB_PATH (ex.: grupo/subgrupo/repo)"; exit 1
-          fi
+          [ -n "$GL_PATH" ] || { echo "Defina a variable GITLAB_PATH"; exit 1; }
           REMOTE="https://oauth2:${GL_TOKEN}@gitlab.com/${GL_PATH}.git"
           REMOTE="${REMOTE%/}"
-          echo "Testando acesso a $REMOTE ..."
           git ls-remote "$REMOTE" >/dev/null
           git remote add gitlab "$REMOTE" || git remote set-url gitlab "$REMOTE"
           git remote -v
 
-      - name: Sync branches and tags (origin → GitLab, safe prune)
-    
+      - name: Sync branches and tags (skip main on GitLab)
         run: |
           set -e
-          # 1) Traga TODAS as branches/tags do GitHub (origin) para refs remotas locais
+          # Puxa todas as branches/tags do GitHub (origin) para refs remotas locais
           git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
 
-          # 2) Espelhe as branches do origin para o GitLab
-          #    (usa as refs remotas, assim 'main' e demais existem e não são "deletadas" por engano)
-          git push --prune gitlab +refs/remotes/origin/*:refs/heads/*
+          # Lista de branches no origin
+          mapfile -t ORIGIN_BRANCHES < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin)
 
-          # 3) Espelhe as tags
+          # 1) Push (force-safe) de TODAS as branches, EXCETO main
+          for br in "${ORIGIN_BRANCHES[@]}"; do
+            if [ "$br" = "main" ]; then
+              echo "Pulando push da branch protegida 'main'"
+              continue
+            fi
+            git push gitlab +refs/remotes/origin/$br:refs/heads/$br
+          done
+
+          # 2) Prune seguro: apaga no GitLab branches que não existem mais no origin (exceto main)
+          mapfile -t GL_BRANCHES < <(git ls-remote --heads gitlab | awk '{print $2}' | sed 's#refs/heads/##')
+          for br in "${GL_BRANCHES[@]}"; do
+            if [ "$br" = "main" ]; then continue; fi
+            if ! printf '%s\n' "${ORIGIN_BRANCHES[@]}" | grep -qx "$br"; then
+              echo "Removendo no GitLab: $br (não existe no origin)"
+              git push gitlab :refs/heads/$br
+            fi
+          done
+
+          # 3) Tags (com prune)
           git push --prune gitlab +refs/tags/*:refs/tags/*
 
-          # 4) (Opcional) LFS
+          # 4) LFS (se houver)
           git lfs push --all gitlab || true
+
