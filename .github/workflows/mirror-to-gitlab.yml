@@ -42,37 +42,38 @@ jobs:
           git remote add gitlab "$REMOTE" || git remote set-url gitlab "$REMOTE"
           git remote -v
 
-      - name: Sync branches and tags (skip main on GitLab)
+      
+      - name: Sync branches and tags (origin → GitLab, no force; skip main)
         run: |
           set -e
-          # Puxa todas as branches/tags do GitHub (origin) para refs remotas locais
+          # 1) Traga todas as branches/tags do GitHub (origin)
           git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
 
-          # Lista de branches no origin
+          # 2) Lista de branches do origin
           mapfile -t ORIGIN_BRANCHES < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin)
 
-          # 1) Push (force-safe) de TODAS as branches, EXCETO main
+          # 3) Envie TODAS as branches, EXCETO main, SEM force
           for br in "${ORIGIN_BRANCHES[@]}"; do
             if [ "$br" = "main" ]; then
-              echo "Pulando push da branch protegida 'main'"
+              echo "Pulando branch protegida 'main'"
               continue
             fi
-            git push gitlab +refs/remotes/origin/$br:refs/heads/$br
+            git push gitlab "refs/remotes/origin/$br:refs/heads/$br"
           done
 
-          # 2) Prune seguro: apaga no GitLab branches que não existem mais no origin (exceto main)
+          # 4) Prune seguro no GitLab (remove branches que saíram do origin), exceto main
           mapfile -t GL_BRANCHES < <(git ls-remote --heads gitlab | awk '{print $2}' | sed 's#refs/heads/##')
           for br in "${GL_BRANCHES[@]}"; do
             if [ "$br" = "main" ]; then continue; fi
             if ! printf '%s\n' "${ORIGIN_BRANCHES[@]}" | grep -qx "$br"; then
               echo "Removendo no GitLab: $br (não existe no origin)"
-              git push gitlab :refs/heads/$br
+              git push gitlab ":refs/heads/$br" || true
             fi
           done
 
-          # 3) Tags (com prune)
-          git push --prune gitlab +refs/tags/*:refs/tags/*
+          # 5) Tags (sem force)
+          git push --prune gitlab "refs/tags/*:refs/tags/*"
 
-          # 4) LFS (se houver)
+          # 6) LFS (se houver)
           git lfs push --all gitlab || true
 
