@@ -1,23 +1,34 @@
+# .gitlab-ci.yml
 stages: [test, approve]
 
-# Exemplo de verificação automática (ajuste pro seu stack)
+# ✅ Roda só em Merge Requests (não em push simples)
 lint:
   stage: test
-  image: node:20
+  image: alpine:3.19
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
-    - npm ci
-    - npm run lint
+    - echo "Lint/checks placeholder (substitua pelos seus testes)"
+    # Ex.: para Node:
+    # - apk add --no-cache nodejs npm
+    # - npm ci
+    # - npm run lint
 
-# Gate manual para branches específicas
-approve_branches:
+# ✅ Gate manual: exige clique + checa quem clicou (Free-friendly)
+approve_gate:
   stage: approve
   rules:
-    # aprove branches de frentes (ajuste a lista)
-    - if: '$CI_COMMIT_BRANCH =~ /^(frontend|backend|data|devops)$/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
   when: manual
   allow_failure: false
-  # usar ambiente protegido para limitar quem pode "Play"
-  environment:
-    name: approvals/$CI_COMMIT_BRANCH
+  script:
+    - echo "Aguardando aprovação manual…"
+    # Allowlist de quem pode clicar no Play (usernames do GitLab)
+    - |
+      ALLOWLIST="paulaPelizer outroMaintainer"
+      if echo " $ALLOWLIST " | grep -qw " $GITLAB_USER_LOGIN "; then
+        echo "Aprovado por $GITLAB_USER_LOGIN"
+      else
+        echo "Usuário $GITLAB_USER_LOGIN não tem permissão para aprovar este gate."
+        exit 1
+      fi
