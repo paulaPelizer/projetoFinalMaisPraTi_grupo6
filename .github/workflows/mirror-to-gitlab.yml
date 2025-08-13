@@ -65,11 +65,24 @@ jobs:
           done
 
       - name: Prune branches no GitLab (SKIP main)
+        shell: bash
         run: |
-          set -e
-          mapfile -t GL_BRANCHES < <(git ls-remote --heads gitlab | awk '{print $2}' | sed 's#refs/heads/##')
-          # Reusa lista de ORIGIN_BRANCHES do step anterior
-          mapfile -t ORIGIN_BRANCHES < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin)
-          for br in "${GL_BRANCHES[@]}"; do
-            if [ "$br" = "main" ]; th
+          set -euo pipefail
+          # branches do origin (GitHub)
+          ORIGIN_BRANCHES="$(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin || true)"
+          # branches existentes no GitLab
+          GL_BRANCHES="$(git ls-remote --heads gitlab | awk '{print $2}' | sed 's#refs/heads/##' || true)"
+
+          # nada a fazer?
+          [ -n "$GL_BRANCHES" ] || exit 0
+
+          # percorre branches do GitLab e remove as que não existem mais no origin (exceto main)
+          while IFS= read -r br; do
+            [ -n "$br" ] || continue
+            [ "$br" = "main" ] && continue
+            if ! grep -qx "$br" <<< "$ORIGIN_BRANCHES"; then
+              echo "→ Deletando no GitLab: $br (não existe no origin)"
+              git push gitlab ":refs/heads/$br" || true
+            fi
+          done <<< "$GL_BRANCHES"
 
