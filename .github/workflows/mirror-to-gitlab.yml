@@ -35,10 +35,16 @@ jobs:
         env:
           GITLAB_REMOTE: ${{ secrets.GITLAB_REMOTE }}
         run: |
-          git remote add gitlab "$GITLAB_REMOTE"
-          # Envia tudo (branches, tags, deleções)
+          # remove / final se tiver
+          REMOTE="${GITLAB_REMOTE%/}"
+          # checa URL/permissão antes (falha cedo com mensagem clara)
+          if ! git ls-remote "$REMOTE" >/dev/null 2>&1; then
+            echo "Falha ao autenticar ou encontrar o repositório no GitLab."
+            echo "Verifique: URL exata (Clone HTTPS), token e permissão no projeto."
+            exit 1
+          fi
+          git remote add gitlab "$REMOTE"
           git push --mirror gitlab
-          # Se tiver LFS, envia também
           git lfs push --all gitlab || true
 
   # (Opcional) job de "pull do GitLab" como fallback nas execuções agendadas
