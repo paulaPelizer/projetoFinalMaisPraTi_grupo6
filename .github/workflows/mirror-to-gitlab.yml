@@ -44,16 +44,19 @@ jobs:
           git remote add gitlab "$REMOTE" || git remote set-url gitlab "$REMOTE"
           git remote -v
 
-      - name: Push branches and tags (avoid hidden refs)
+      - name: Sync branches and tags (origin → GitLab, safe prune)
+    
         run: |
           set -e
-          # Remove refs ocultas criadas pelo checkout (refs/remotes/origin/*)
-          for ref in $(git for-each-ref --format='%(refname)' refs/remotes); do
-            git update-ref -d "$ref"
-          done
-          # Branches: espelha inclusive deleções e rewrites
-          git push --prune gitlab +refs/heads/*:refs/heads/*
-          # Tags: idem
+          # 1) Traga TODAS as branches/tags do GitHub (origin) para refs remotas locais
+          git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
+
+          # 2) Espelhe as branches do origin para o GitLab
+          #    (usa as refs remotas, assim 'main' e demais existem e não são "deletadas" por engano)
+          git push --prune gitlab +refs/remotes/origin/*:refs/heads/*
+
+          # 3) Espelhe as tags
           git push --prune gitlab +refs/tags/*:refs/tags/*
-          # LFS (se houver)
+
+          # 4) (Opcional) LFS
           git lfs push --all gitlab || true
