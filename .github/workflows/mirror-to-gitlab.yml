@@ -76,3 +76,4 @@ jobs:
           # 4) LFS (se houver)
           git lfs push --all gitlab || true
 
+
