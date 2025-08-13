@@ -32,3 +32,4 @@ approve_gate:
         echo "Usuário $GITLAB_USER_LOGIN não tem permissão para aprovar este gate."
         exit 1
       fi
+
