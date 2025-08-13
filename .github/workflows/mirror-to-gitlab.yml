@@ -45,7 +45,7 @@ jobs:
           git remote -v
 
       - name: Sync branches and tags (origin → GitLab, safe prune)
-    
+
         run: |
           set -e
           # 1) Traga TODAS as branches/tags do GitHub (origin) para refs remotas locais
@@ -60,3 +60,4 @@ jobs:
 
           # 4) (Opcional) LFS
           git lfs push --all gitlab || true
+
