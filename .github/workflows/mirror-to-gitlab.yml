@@ -16,7 +16,6 @@ concurrency:
 jobs:
   to_gitlab:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout full history
         uses: actions/checkout@v4
@@ -31,21 +30,30 @@ jobs:
 
       - name: Build remote and verify access
         env:
-          GL_TOKEN: ${{ secrets.GITLAB_REMOTE }}   # <= só o token glpat-...
-          GL_PATH:  ${{ vars.GITLAB_PATH }}        # <= ex.: meu-grupo/subgrupo/meu-repo
+          GL_TOKEN: ${{ secrets.GITLAB_REMOTE }}   # token glpat-...
+          GL_PATH:  ${{ vars.GITLAB_PATH }}        # ex.: projeto-final-maisprati-codifica/projetofinalmaispratigrupo6
         run: |
           set -e
           if [ -z "$GL_PATH" ]; then
-            echo "Defina a Repository variable GITLAB_PATH (ex.: meu-grupo/subgrupo/meu-repo)"; exit 1
+            echo "Defina a Repository variable GITLAB_PATH (ex.: grupo/subgrupo/repo)"; exit 1
           fi
           REMOTE="https://oauth2:${GL_TOKEN}@gitlab.com/${GL_PATH}.git"
-          REMOTE="${REMOTE%/}"                       # remove / final se houver
-          echo "Testando acesso ao remoto: $REMOTE"
+          REMOTE="${REMOTE%/}"
+          echo "Testando acesso a $REMOTE ..."
           git ls-remote "$REMOTE" >/dev/null
           git remote add gitlab "$REMOTE" || git remote set-url gitlab "$REMOTE"
           git remote -v
 
-      - name: Push --mirror to GitLab
+      - name: Push branches and tags (avoid hidden refs)
         run: |
-          git push --mirror gitlab
+          set -e
+          # Remove refs ocultas criadas pelo checkout (refs/remotes/origin/*)
+          for ref in $(git for-each-ref --format='%(refname)' refs/remotes); do
+            git update-ref -d "$ref"
+          done
+          # Branches: espelha inclusive deleções e rewrites
+          git push --prune gitlab +refs/heads/*:refs/heads/*
+          # Tags: idem
+          git push --prune gitlab +refs/tags/*:refs/tags/*
+          # LFS (se houver)
           git lfs push --all gitlab || true
