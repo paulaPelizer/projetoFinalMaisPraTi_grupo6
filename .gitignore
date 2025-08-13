@@ -1,0 +1,15 @@
+# node / builds
+dist/
+build/
+.next/
+.vite/
+.turbo/
+.pnpm-store/
+
+#Editor / SO
+.DS_Store
+*.log
+
+#Env
+.env
+apps/*/.env
