@@ -8,9 +8,6 @@ on:
     branches: ["**"]
     tags: ["**"]
   workflow_dispatch:
-  # (Opcional) sincronismo periódico de segurança
-  schedule:
-    - cron: "*/30 * * * *"  # a cada 30 minutos
 
 concurrency:
   group: mirror-to-gitlab
@@ -19,6 +16,7 @@ concurrency:
 jobs:
   to_gitlab:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout full history
         uses: actions/checkout@v4
@@ -31,35 +29,23 @@ jobs:
           git config user.email "mirror-bot@users.noreply.github.com"
           git lfs install --skip-smudge
 
-      - name: Push --mirror to GitLab
+      - name: Build remote and verify access
         env:
-          GITLAB_REMOTE: ${{ secrets.GITLAB_REMOTE }}
+          GL_TOKEN: ${{ secrets.GITLAB_REMOTE }}   # <= só o token glpat-...
+          GL_PATH:  ${{ vars.GITLAB_PATH }}        # <= ex.: meu-grupo/subgrupo/meu-repo
         run: |
-          # remove / final se tiver
-          REMOTE="${GITLAB_REMOTE%/}"
-          # checa URL/permissão antes (falha cedo com mensagem clara)
-          if ! git ls-remote "$REMOTE" >/dev/null 2>&1; then
-            echo "Falha ao autenticar ou encontrar o repositório no GitLab."
-            echo "Verifique: URL exata (Clone HTTPS), token e permissão no projeto."
-            exit 1
+          set -e
+          if [ -z "$GL_PATH" ]; then
+            echo "Defina a Repository variable GITLAB_PATH (ex.: meu-grupo/subgrupo/meu-repo)"; exit 1
           fi
-          git remote add gitlab "$REMOTE"
+          REMOTE="https://oauth2:${GL_TOKEN}@gitlab.com/${GL_PATH}.git"
+          REMOTE="${REMOTE%/}"                       # remove / final se houver
+          echo "Testando acesso ao remoto: $REMOTE"
+          git ls-remote "$REMOTE" >/dev/null
+          git remote add gitlab "$REMOTE" || git remote set-url gitlab "$REMOTE"
+          git remote -v
+
+      - name: Push --mirror to GitLab
+        run: |
           git push --mirror gitlab
           git lfs push --all gitlab || true
-
-  # (Opcional) job de "pull do GitLab" como fallback nas execuções agendadas
-  pull_from_gitlab_fallback:
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout full history
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Sync from GitLab (fetch → push origin)
-        env:
-          GITLAB_REMOTE: ${{ secrets.GITLAB_REMOTE }}
-        run: |
-          git remote add gitlab "$GITLAB_REMOTE" || true
-          git fetch --prune --tags gitlab
-          git push --mirror origin
