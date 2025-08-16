@@ -37,17 +37,18 @@ jobs:
         env:
           GL_TOKEN: ${{ secrets.GITLAB_REMOTE }}   # token glpat-...
           GL_PATH:  ${{ vars.GITLAB_PATH }}        # ex.: meu-grupo/subgrupo/meu-repo
+
         run: |
           set -e
           [ -n "$GL_PATH" ] || { echo "Defina a variable GITLAB_PATH"; exit 1; }
           REMOTE="https://oauth2:${GL_TOKEN}@gitlab.com/${GL_PATH}.git"
           REMOTE="${REMOTE%/}"
-          echo "Testando acesso a $REMOTE ..."
           git ls-remote "$REMOTE" >/dev/null
           git remote add gitlab "$REMOTE" || git remote set-url gitlab "$REMOTE"
           # traga TODAS as branches/tags do GitHub (origin)
           git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
           git remote -v
+
 
       - name: Sync branches (NO force; SKIP main)
         run: |
@@ -65,11 +66,24 @@ jobs:
           done
 
       - name: Prune branches no GitLab (SKIP main)
+        shell: bash
         run: |
-          set -e
-          mapfile -t GL_BRANCHES < <(git ls-remote --heads gitlab | awk '{print $2}' | sed 's#refs/heads/##')
-          # Reusa lista de ORIGIN_BRANCHES do step anterior
-          mapfile -t ORIGIN_BRANCHES < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin)
-          for br in "${GL_BRANCHES[@]}"; do
-            if [ "$br" = "main" ]; th
+          set -euo pipefail
+          # branches do origin (GitHub)
+          ORIGIN_BRANCHES="$(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin || true)"
+          # branches existentes no GitLab
+          GL_BRANCHES="$(git ls-remote --heads gitlab | awk '{print $2}' | sed 's#refs/heads/##' || true)"
+
+          # nada a fazer?
+          [ -n "$GL_BRANCHES" ] || exit 0
+
+          # percorre branches do GitLab e remove as que não existem mais no origin (exceto main)
+          while IFS= read -r br; do
+            [ -n "$br" ] || continue
+            [ "$br" = "main" ] && continue
+            if ! grep -qx "$br" <<< "$ORIGIN_BRANCHES"; then
+              echo "→ Deletando no GitLab: $br (não existe no origin)"
+              git push gitlab ":refs/heads/$br" || true
+            fi
+          done <<< "$GL_BRANCHES"
 
