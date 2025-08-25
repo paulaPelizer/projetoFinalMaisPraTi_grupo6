@@ -1,0 +1,21 @@
+{
+  "name": "docflow-react-node",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "turbo": "^2.1.1"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test --filter='./apps/**'"
+  },
+  "dependencies": {
+    "react-router-dom": "^6.30.1"
+  }
+}

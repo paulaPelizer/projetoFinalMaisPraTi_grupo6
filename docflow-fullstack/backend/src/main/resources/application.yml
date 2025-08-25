@@ -1,0 +1,41 @@
+server:
+  address: 127.0.0.1
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: always
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: DEBUG
+    com.adi.docflow: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+
+spring:
+  datasource:
+    url: jdbc:sqlserver://127.0.0.1:1433;databaseName=docflow;encrypt=true;trustServerCertificate=true;
+    username: docflow_app
+    password: Docflow@123
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+
+  jpa:
+    open-in-view: true
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.SQLServerDialect
+        default_schema: app        # 👈 garante que o Hibernate olhe para o schema 'app'
+        jdbc.time_zone: UTC
+    show-sql: false
+    database-platform: org.hibernate.dialect.SQLServerDialect
+
+  flyway:
+    enabled: true
+    schemas: app
+    create-schemas: true          # 👈 cria o schema se faltar
+    locations: classpath:db/migration
